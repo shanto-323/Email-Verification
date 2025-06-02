@@ -10,7 +10,16 @@ type SignUpModel struct {
 }
 
 type VerifyModel struct {
-	UID   string        `json:"uid"`
+	UID   string        `json:"id"`
 	Email string        `json:"email"`
 	EXP   time.Duration `json:"exp"`
+}
+
+type IDModel struct {
+	UID string `json:"id"`
+}
+
+type FA2Model struct {
+	UID string `json:"id"`
+	FA2 string `json:"fa2"` // 2FA Code
 }

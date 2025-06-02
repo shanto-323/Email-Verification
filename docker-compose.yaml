@@ -9,12 +9,25 @@ services:
       - "8025:8025"
     restart: unless-stopped
 
+  redis:
+    image: redis:latest
+    platform: linux/amd64
+    container_name: redis
+    env_file:
+      - .env
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
   email-service:
     build:
       context: .
       dockerfile: email-auth/app.dockerfile
+    env_file:
+      - .env
     depends_on:
       - mailhog
+      - redis
     ports:
       - "8080:8080"
     restart: on-failure

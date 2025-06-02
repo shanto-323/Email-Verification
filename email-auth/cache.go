@@ -10,7 +10,7 @@ import (
 
 type Cache interface {
 	SetValue(ctx context.Context, key string, value []byte, exp time.Duration) error
-	GetValue(ctx context.Context, key string, value interface{}, exp time.Duration) error
+	GetValue(ctx context.Context, key string, value interface{}) error
 }
 
 type RedisCache struct {
@@ -32,7 +32,7 @@ func (r *RedisCache) SetValue(ctx context.Context, key string, value []byte, exp
 	return nil
 }
 
-func (r *RedisCache) GetValue(ctx context.Context, key string, value interface{}, exp time.Duration) error {
+func (r *RedisCache) GetValue(ctx context.Context, key string, value interface{}) error {
 	result, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		return err

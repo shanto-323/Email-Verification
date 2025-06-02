@@ -62,13 +62,14 @@ func main() {
 	server := NewServer(cfg.IpAddr, redisClient)
 
 	router := http.NewServeMux()
-	router.HandleFunc("/signup", handleFunc(server.signUpHandler))
-	// router.HandleFunc("/verify", handleFunc(server.sendEmailVarificationHandler))
+	router.HandleFunc("/signup", handleFunc(server.SignUpHandler))
+	router.HandleFunc("/verify", handleFunc(server.EmailVerificationHandler))
+	router.HandleFunc("/newcode", handleFunc(server.NewEmailVerificationHandler))
 
-	log.Fatal(http.ListenAndServe(server.ipAddr, router))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", server.ipAddr), router))
 }
 
-func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) SignUpHandler(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
 		return fmt.Errorf("invalid method")
 	}
@@ -92,7 +93,7 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
-	if err := s.sendEmailVarification(
+	if err := s.sendEmailVerification(
 		ctx,
 		VerifyModel{
 			UID:   client.ID,
@@ -103,10 +104,73 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return WriteJson(w, http.StatusCreated, "code sent")
+	return WriteJson(w, http.StatusOK, IDModel{UID: client.ID})
 }
 
-func (s *Server) sendEmailVarification(ctx context.Context, verifyModel VerifyModel) error {
+func (s *Server) EmailVerificationHandler(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return fmt.Errorf("invalid method")
+	}
+
+	fa2 := &FA2Model{}
+	if err := json.NewDecoder(r.Body).Decode(&fa2); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client_model := &SignUpModel{}
+	if err := s.cache.GetValue(ctx, fa2.UID, client_model); err != nil {
+		return err
+	}
+	log.Println(fmt.Sprintln("client_model", client_model))
+
+	verify_model := &VerifyModel{}
+	if err := s.cache.GetValue(ctx, fa2.FA2, verify_model); err != nil {
+		return err
+	}
+	log.Println(fmt.Sprintln("verify_model", verify_model)) // Found = issued fa2 (2fa) key
+
+	if client_model.Email != verify_model.Email {
+		return fmt.Errorf("invalid code")
+	}
+
+	return WriteJson(w, http.StatusCreated, "user created")
+}
+
+func (s *Server) NewEmailVerificationHandler(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodGet {
+		return fmt.Errorf("invalid method")
+	}
+
+	id := &IDModel{}
+	if err := json.NewDecoder(r.Body).Decode(&id); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client := &SignUpModel{}
+	if err := s.cache.GetValue(ctx, id.UID, client); err != nil {
+		return err
+	}
+	log.Println(fmt.Sprintln("client_model", client))
+
+	if err := s.sendEmailVerification(
+		ctx,
+		VerifyModel{
+			UID:   client.ID,
+			Email: client.Email,
+			EXP:   1 * time.Minute,
+		},
+	); err != nil {
+		return err
+	}
+
+	return WriteJson(w, http.StatusCreated, "email sent")
+}
+
+func (s *Server) sendEmailVerification(ctx context.Context, verifyModel VerifyModel) error {
 	to := verifyModel.Email
 	subject := "varification"
 	body := GenerateSixDigitCode()
@@ -120,7 +184,7 @@ func (s *Server) sendEmailVarification(ctx context.Context, verifyModel VerifyMo
 		return nil
 	}
 
-	if err := sendEmailVarification(to, subject, body); err != nil {
+	if err := sendEmailVerification(to, subject, body); err != nil {
 		return err
 	}
 
