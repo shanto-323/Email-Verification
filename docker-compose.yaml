@@ -1,0 +1,20 @@
+services:
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    platform: linux/amd64
+    container_name: mailhog-service-1
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+
+  email-service:
+    build:
+      context: .
+      dockerfile: email-auth/app.dockerfile
+    depends_on:
+      - mailhog
+    ports:
+      - "8080:8080"
+    restart: on-failure
