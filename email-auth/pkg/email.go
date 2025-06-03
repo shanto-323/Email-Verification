@@ -1,4 +1,4 @@
-package internal
+package pkg
 
 import (
 	"gopkg.in/gomail.v2"

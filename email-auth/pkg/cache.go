@@ -1,9 +1,8 @@
-package internal
+package pkg
 
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -31,7 +30,6 @@ func (r *RedisCache) SetValue(ctx context.Context, key string, value []byte, exp
 		return err
 	}
 
-	log.Println("cache set")
 	return nil
 }
 
@@ -44,7 +42,6 @@ func (r *RedisCache) GetValue(ctx context.Context, key string, value interface{}
 		return err
 	}
 
-	log.Println("cache get")
 	return nil
 }
 

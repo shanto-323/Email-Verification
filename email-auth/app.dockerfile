@@ -2,7 +2,7 @@ FROM golang:alpine AS build
 WORKDIR /email-auth
 COPY email-auth/go.mod email-auth/go.sum ./
 COPY email-auth ./
-RUN go build -o app .
+RUN go build -o app ./cmd
 
 FROM alpine:3.21
 WORKDIR /usr/bin
