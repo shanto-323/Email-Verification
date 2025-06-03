@@ -1,10 +1,10 @@
-package main
+package internal
 
 import (
 	"gopkg.in/gomail.v2"
 )
 
-func sendEmailVerification(to, subject, body string) error {
+func SendEmailVerification(to, subject, body string) error {
 	m := gomail.NewMessage()
 	m.SetHeader("From", "noreply@shanto")
 	m.SetHeader("To", to)

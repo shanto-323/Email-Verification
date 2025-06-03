@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"time"
 
+	in "email-auth/internal"
+	middleware "email-auth/middleware"
+
 	"github.com/kelseyhightower/envconfig"
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/ksuid"
@@ -18,13 +21,13 @@ import (
 
 type Server struct {
 	ipAddr string
-	cache  Cache
+	cache  in.Cache
 }
 
 func NewServer(ipAddr string, client *redis.Client) *Server {
 	return &Server{
 		ipAddr: ipAddr,
-		cache:  NewRedisCatch(client),
+		cache:  in.NewRedisCatch(client),
 	}
 }
 
@@ -62,9 +65,9 @@ func main() {
 	server := NewServer(cfg.IpAddr, redisClient)
 
 	router := http.NewServeMux()
-	router.HandleFunc("/signup", handleFunc(server.SignUpHandler))
+	router.HandleFunc("/signup", middleware.Ratelimit(handleFunc(server.SignUpHandler), server.cache))
 	router.HandleFunc("/verify", handleFunc(server.EmailVerificationHandler))
-	router.HandleFunc("/newcode", handleFunc(server.NewEmailVerificationHandler))
+	router.HandleFunc("/newcode", middleware.Ratelimit(handleFunc(server.NewEmailVerificationHandler), server.cache))
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", server.ipAddr), router))
 }
@@ -74,7 +77,7 @@ func (s *Server) SignUpHandler(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("invalid method")
 	}
 
-	client := &SignUpModel{}
+	client := &in.SignUpModel{}
 	if err := json.NewDecoder(r.Body).Decode(&client); err != nil {
 		return err
 	}
@@ -95,7 +98,7 @@ func (s *Server) SignUpHandler(w http.ResponseWriter, r *http.Request) error {
 
 	if err := s.sendEmailVerification(
 		ctx,
-		VerifyModel{
+		in.VerifyModel{
 			UID:   client.ID,
 			Email: client.Email,
 			EXP:   1 * time.Minute,
@@ -104,7 +107,7 @@ func (s *Server) SignUpHandler(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return WriteJson(w, http.StatusOK, IDModel{UID: client.ID})
+	return WriteJson(w, http.StatusOK, in.IDModel{UID: client.ID})
 }
 
 func (s *Server) EmailVerificationHandler(w http.ResponseWriter, r *http.Request) error {
@@ -112,20 +115,20 @@ func (s *Server) EmailVerificationHandler(w http.ResponseWriter, r *http.Request
 		return fmt.Errorf("invalid method")
 	}
 
-	fa2 := &FA2Model{}
+	fa2 := &in.FA2Model{}
 	if err := json.NewDecoder(r.Body).Decode(&fa2); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	client_model := &SignUpModel{}
+	client_model := &in.SignUpModel{}
 	if err := s.cache.GetValue(ctx, fa2.UID, client_model); err != nil {
 		return err
 	}
 	log.Println(fmt.Sprintln("client_model", client_model))
 
-	verify_model := &VerifyModel{}
+	verify_model := &in.VerifyModel{}
 	if err := s.cache.GetValue(ctx, fa2.FA2, verify_model); err != nil {
 		return err
 	}
@@ -143,14 +146,14 @@ func (s *Server) NewEmailVerificationHandler(w http.ResponseWriter, r *http.Requ
 		return fmt.Errorf("invalid method")
 	}
 
-	id := &IDModel{}
+	id := &in.IDModel{}
 	if err := json.NewDecoder(r.Body).Decode(&id); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	client := &SignUpModel{}
+	client := &in.SignUpModel{}
 	if err := s.cache.GetValue(ctx, id.UID, client); err != nil {
 		return err
 	}
@@ -158,7 +161,7 @@ func (s *Server) NewEmailVerificationHandler(w http.ResponseWriter, r *http.Requ
 
 	if err := s.sendEmailVerification(
 		ctx,
-		VerifyModel{
+		in.VerifyModel{
 			UID:   client.ID,
 			Email: client.Email,
 			EXP:   1 * time.Minute,
@@ -170,7 +173,7 @@ func (s *Server) NewEmailVerificationHandler(w http.ResponseWriter, r *http.Requ
 	return WriteJson(w, http.StatusCreated, "email sent")
 }
 
-func (s *Server) sendEmailVerification(ctx context.Context, verifyModel VerifyModel) error {
+func (s *Server) sendEmailVerification(ctx context.Context, verifyModel in.VerifyModel) error {
 	to := verifyModel.Email
 	subject := "varification"
 	body := GenerateSixDigitCode()
@@ -184,7 +187,7 @@ func (s *Server) sendEmailVerification(ctx context.Context, verifyModel VerifyMo
 		return nil
 	}
 
-	if err := sendEmailVerification(to, subject, body); err != nil {
+	if err := in.SendEmailVerification(to, subject, body); err != nil {
 		return err
 	}
 
